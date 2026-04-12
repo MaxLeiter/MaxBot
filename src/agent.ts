@@ -26,7 +26,6 @@ export class Agent {
   private totalTokens = 0;
   private queryCount = 0;
   private env: Record<string, string>;
-  debug = false;
 
   constructor(config: Config, irc: IrcClient, context: ContextManager, crons: CronManager) {
     this.config = config;
@@ -195,13 +194,13 @@ export class Agent {
         for (const block of message.message.content as any[]) {
           if (block.type === "text" && block.text) {
             log.logThinking(block.text);
-            if (this.debug && target) {
+            if (getSettings().debug && target) {
               const preview = block.text.length > 120 ? block.text.slice(0, 120) + "..." : block.text;
               this.irc.action(target, `thinks: ${preview}`);
             }
           } else if (block.type === "tool_use") {
             log.logToolCall(block.name, block.input);
-            if (this.debug && target) {
+            if (getSettings().debug && target) {
               const name = block.name.replace("mcp__irc__", "").replace("mcp__", "");
               const args = block.input ? Object.entries(block.input)
                 .map(([k, v]) => {

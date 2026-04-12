@@ -9,12 +9,14 @@ export interface Settings {
   model: string;
   channels: string[];
   authorizedUsers: string[];
+  debug: boolean;
 }
 
 const DEFAULTS: Settings = {
   model: "claude-sonnet-4-6",
   channels: ["#bot-testing"],
   authorizedUsers: ["maxleiter"],
+  debug: false,
 };
 
 let current: Settings = { ...DEFAULTS };

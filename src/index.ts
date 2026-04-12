@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { loadConfig } from "./config.js";
-import { loadSettings, getSettings } from "./settings.js";
+import { loadSettings, getSettings, updateSettings } from "./settings.js";
 import { IrcClient } from "./irc.js";
 import { ContextManager } from "./context.js";
 import { CronManager } from "./cron.js";
@@ -85,10 +85,12 @@ function handleCommand(command: string, args: string, target: string) {
         irc.say(target, `model: ${getSettings().model}`);
       }
       break;
-    case "debug":
-      agent.debug = !agent.debug;
-      irc.say(target, `debug mode ${agent.debug ? "on" : "off"}`);
+    case "debug": {
+      const newDebug = !getSettings().debug;
+      updateSettings({ debug: newDebug });
+      irc.say(target, `debug mode ${newDebug ? "on" : "off"}`);
       break;
+    }
     case "help":
       irc.say(target, "commands: !restart, !pull, !status, !model, !debug, !help");
       break;
