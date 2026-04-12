@@ -70,7 +70,8 @@ function handleCommand(command: string, args: string, target: string) {
       break;
     case "pull":
       try {
-        const out = execSync("git -C /opt/maxbot pull --ff-only 2>&1", { encoding: "utf-8" }).trim();
+        execSync("git -C /opt/maxbot checkout -- . && git -C /opt/maxbot checkout main 2>&1", { encoding: "utf-8" });
+        const out = execSync("git -C /opt/maxbot pull --ff-only origin main 2>&1", { encoding: "utf-8" }).trim();
         irc.say(target, out.split("\n").slice(0, 3).join(" | "));
       } catch (err: any) {
         irc.say(target, `pull failed: ${err.message?.split("\n")[0]}`);
