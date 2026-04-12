@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { loadConfig } from "./config.js";
 import { loadSettings, getSettings } from "./settings.js";
 import { IrcClient } from "./irc.js";
@@ -27,23 +28,71 @@ irc.onMessage((event) => {
   if (!getSettings().authorizedUsers.includes(nick.toLowerCase())) return;
 
   const isDM = target.toLowerCase() === botNickLower;
+  const replyTarget = isDM ? nick : target;
 
+  // Extract message after nick mention
+  let stripped: string;
   if (isDM) {
-    context.markActive(nick);
-    agent.handleMessage(nick, nick, message);
+    stripped = message;
+  } else {
+    if (!nickMentionRegex.test(message)) return;
+    stripped = message.replace(nickStripRegex, "").trim();
+    if (!stripped) return;
+  }
+
+  // Handle ! commands deterministically (no AI)
+  const cmd = stripped.match(/^!(\w+)\s*(.*)?$/);
+  if (cmd) {
+    const [, command, args] = cmd;
+    handleCommand(command, args?.trim() ?? "", replyTarget);
     return;
   }
 
-  if (!nickMentionRegex.test(message)) return;
-
-  const stripped = message.replace(nickStripRegex, "").trim();
-  if (!stripped) return;
-
-  context.markActive(target);
-  agent.handleMessage(nick, target, stripped);
+  context.markActive(replyTarget);
+  agent.handleMessage(nick, replyTarget, stripped);
 });
 
-// Graceful shutdown
+function handleCommand(command: string, args: string, target: string) {
+  log.logInfo(`Command: !${command} ${args}`);
+  switch (command) {
+    case "restart":
+      irc.say(target, "restarting...");
+      setTimeout(() => {
+        execSync("systemctl restart maxbot", { stdio: "ignore" });
+      }, 500);
+      break;
+    case "pull":
+      try {
+        const out = execSync("git -C /opt/maxbot pull --ff-only 2>&1", { encoding: "utf-8" }).trim();
+        irc.say(target, out.split("\n").slice(0, 3).join(" | "));
+      } catch (err: any) {
+        irc.say(target, `pull failed: ${err.message?.split("\n")[0]}`);
+      }
+      break;
+    case "status": {
+      const stats = agent.getStats();
+      const uptime = process.uptime();
+      const mins = Math.floor(uptime / 60);
+      const hrs = Math.floor(mins / 60);
+      const uptimeStr = hrs > 0 ? `${hrs}h${mins % 60}m` : `${mins}m`;
+      irc.say(target, `up ${uptimeStr}, ${stats.queries} queries, $${stats.totalCostUsd.toFixed(4)}, model: ${getSettings().model}`);
+      break;
+    }
+    case "model":
+      if (args) {
+        irc.say(target, `use "switch to <model>" instead of !model`);
+      } else {
+        irc.say(target, `model: ${getSettings().model}`);
+      }
+      break;
+    case "help":
+      irc.say(target, "commands: !restart, !pull, !status, !model, !help");
+      break;
+    default:
+      irc.say(target, `unknown command: !${command}. try !help`);
+  }
+}
+
 async function shutdown() {
   log.logInfo("Shutting down...");
   crons.stopAll();

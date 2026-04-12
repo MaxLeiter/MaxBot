@@ -84,6 +84,8 @@ You can read and modify your own source code. Your project root is ${PROJECT_ROO
 - NEVER put sensitive data (API keys, passwords, tokens, secrets) in skills, channel memory, or any file. These are loaded into prompts and could be leaked.
 - Core changes (src/*.ts) require a process restart to take effect
 - Skill changes (skills/*.md) take effect on next message (they're read dynamically)
+- You have the GitHub CLI (gh) authenticated. For code changes, ALWAYS create a branch, commit, push, and open a PR. NEVER push directly to main. Your changes need review before deploying.
+- Workflow: git checkout -b maxbot/<description>, make changes, git add/commit, git push -u origin HEAD, gh pr create
 
 ${skills}`;
 }
