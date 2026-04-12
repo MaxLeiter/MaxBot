@@ -58,7 +58,34 @@ export class Agent {
     };
   }
 
+  // Per-target message queues — process one at a time to avoid spawning
+  // parallel Claude processes on a memory-constrained box
+  private queues = new Map<string, Array<{ nick: string; target: string; message: string }>>();
+  private processing = new Set<string>();
+
   async handleMessage(nick: string, target: string, message: string) {
+    const key = target.toLowerCase();
+    if (!this.queues.has(key)) this.queues.set(key, []);
+    this.queues.get(key)!.push({ nick, target, message });
+
+    if (!this.processing.has(key)) {
+      this.processQueue(key);
+    }
+  }
+
+  private async processQueue(key: string) {
+    this.processing.add(key);
+    const queue = this.queues.get(key)!;
+
+    while (queue.length > 0) {
+      const { nick, target, message } = queue.shift()!;
+      await this.processMessage(nick, target, message);
+    }
+
+    this.processing.delete(key);
+  }
+
+  private async processMessage(nick: string, target: string, message: string) {
     const settings = getSettings();
     this.systemPrompt = await buildSystemPrompt(
       this.config.irc.nick,
