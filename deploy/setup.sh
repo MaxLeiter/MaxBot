@@ -5,12 +5,17 @@ set -e
 # Usage: ssh root@your-droplet 'bash -s' < deploy/setup.sh
 
 echo "=== Installing bun ==="
+apt-get update -qq && apt-get install -y -qq git unzip
 curl -fsSL https://bun.sh/install | bash
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
-echo "=== Installing git ==="
-apt-get update -qq && apt-get install -y -qq git
+echo "=== Installing Node.js 22 (required by Claude Code) ==="
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y -qq nodejs
+
+echo "=== Installing Claude Code CLI ==="
+npm install -g @anthropic-ai/claude-code
 
 echo "=== Creating maxbot user ==="
 id -u maxbot &>/dev/null || useradd -m -s /bin/bash maxbot
@@ -37,6 +42,18 @@ if [ ! -f /etc/maxbot/.env ]; then
   cp "$REPO_DIR/.env.example" /etc/maxbot/.env
   echo ">>> Edit /etc/maxbot/.env with your API keys <<<"
 fi
+
+echo "=== Configuring Claude Code permissions ==="
+su - maxbot -c 'mkdir -p ~/.claude && cat > ~/.claude/settings.json << SETTINGS
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch"
+    ]
+  }
+}
+SETTINGS'
 
 echo "=== Setting permissions ==="
 chown -R maxbot:maxbot "$REPO_DIR"

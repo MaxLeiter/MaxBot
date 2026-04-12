@@ -43,14 +43,37 @@ bun run src/index.ts
 - **IRC formatting** — converts `\x02` bold, `\x03` color codes, etc. for native IRC rendering
 - **Guardrails** — only responds to authorized users, only sends to recently-addressed channels
 
-## Deploy to Fly.io
+## Deploy to a VPS
+
+### Quick setup (Ubuntu)
 
 ```sh
-fly launch          # first time
-fly vol create maxbot_data --size 1 --region iad
-fly secrets set ANTHROPIC_BASE_URL=https://ai-gateway.vercel.sh ANTHROPIC_AUTH_TOKEN=...
-fly deploy
+ssh root@your-server 'bash -s' < deploy/setup.sh
 ```
+
+This installs bun, Node.js 22, Claude Code CLI, creates a `maxbot` user, and sets up the systemd service.
+
+Then:
+
+```sh
+# Set your API keys
+ssh root@your-server 'nano /etc/maxbot/.env'
+
+# Start the bot
+ssh root@your-server 'systemctl start maxbot'
+
+# Watch logs
+ssh root@your-server 'journalctl -u maxbot -f'
+```
+
+### Prerequisites
+
+The setup script handles all of these, but for reference:
+
+- **Bun** — runtime
+- **Node.js 22+** — required by Claude Code CLI (the Agent SDK spawns it as a subprocess)
+- **Claude Code CLI** — `npm install -g @anthropic-ai/claude-code`
+- **Claude Code permissions** — WebSearch/WebFetch must be allowed in `~maxbot/.claude/settings.json` (setup script creates this)
 
 ## Project Structure
 

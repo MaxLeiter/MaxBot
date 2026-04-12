@@ -111,6 +111,7 @@ export class Agent {
     for await (const message of query({
       prompt,
       options: {
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
         systemPrompt: this.systemPrompt!,
         model,
         cwd: this.projectRoot,
