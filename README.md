@@ -1,5 +1,8 @@
 # MaxBot
 
+> **Warning**
+> This bot is largely written by AI and has real filesystem, shell, and network access on the machine it runs on. It can read and modify its own source code, execute shell commands, and push to GitHub. Run it on an isolated machine with a dedicated user and review all PRs it opens. Do not give it access to secrets beyond what it needs.
+
 A self-programmable IRC bot powered by Claude. It connects to IRC, responds to authorized users, and can modify its own source code, create new skills, and commit changes to persist improvements.
 
 ## Stack
