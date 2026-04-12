@@ -166,6 +166,31 @@ export class IrcClient {
     this.client.on("privmsg", handler);
   }
 
+  /** Wait for the next message from a specific nick in a specific target. Times out after 2 min. */
+  waitForReply(nick: string, target: string, timeoutMs = 120000): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error("timed out waiting for reply"));
+      }, timeoutMs);
+
+      const onMessage = (event: any) => {
+        if (event.nick.toLowerCase() === nick.toLowerCase() &&
+            event.target.toLowerCase() === target.toLowerCase()) {
+          cleanup();
+          resolve(event.message);
+        }
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        this.client.removeListener("privmsg", onMessage);
+      };
+
+      this.client.on("privmsg", onMessage);
+    });
+  }
+
   private enqueue(target: string, message: string) {
     this.sendQueue.push({ target, message: formatForIrc(message) });
     if (!this.sending) this.drain();

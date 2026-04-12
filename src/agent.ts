@@ -96,6 +96,44 @@ export class Agent {
     return result;
   }
 
+  private async handleAskUser(input: any, nick: string, target: string) {
+    const answers: Record<string, string> = {};
+
+    for (const q of input.questions ?? []) {
+      // Send the question to IRC
+      const options = (q.options ?? []) as Array<{ label: string; description?: string }>;
+      this.irc.say(target, q.question);
+      if (options.length > 0) {
+        const optStr = options.map((o, i) => `${i + 1}) ${o.label}`).join("  ");
+        this.irc.say(target, optStr);
+      }
+
+      log.logInfo(`AskUserQuestion: waiting for reply from ${nick} in ${target}`);
+
+      // For DMs, the target is the nick. For channels, need to listen for nick-mentioned reply.
+      // We listen on the raw target for the user's next message.
+      const listenTarget = target.startsWith("#") ? target : nick;
+
+      try {
+        const reply = await this.irc.waitForReply(nick, listenTarget);
+        // Check if reply is a number (option selection) or free text
+        const num = parseInt(reply.trim());
+        if (!isNaN(num) && num >= 1 && num <= options.length) {
+          answers[q.question] = options[num - 1].label;
+        } else {
+          answers[q.question] = reply.trim();
+        }
+      } catch {
+        answers[q.question] = "(no response)";
+      }
+    }
+
+    return {
+      behavior: "allow" as const,
+      updatedInput: { questions: input.questions, answers },
+    };
+  }
+
   getStats() {
     return {
       queries: this.queryCount,
@@ -146,7 +184,7 @@ export class Agent {
     log.logMessage(target, nick, message);
 
     try {
-      const result = await this.runQuery(systemPrompt, userPrompt, target);
+      const result = await this.runQuery(systemPrompt, userPrompt, nick, target);
       if (result && !result.includes("__SKIP__")) {
         log.logReply(target, result);
         this.irc.say(target, result);
@@ -160,7 +198,7 @@ export class Agent {
     }
   }
 
-  private async runQuery(systemPrompt: string, prompt: string, target?: string): Promise<string | null> {
+  private async runQuery(systemPrompt: string, prompt: string, nick?: string, target?: string): Promise<string | null> {
     let resultText: string | null = null;
     const startTime = Date.now();
     const model = getSettings().model;
@@ -197,6 +235,7 @@ export class Agent {
           "mcp__irc__skip_reply",
           "WebSearch",
           "WebFetch",
+          "AskUserQuestion",
         ],
         disallowedTools: [
           "CronCreate",
@@ -205,6 +244,13 @@ export class Agent {
         ],
         mcpServers: {
           irc: this.ircToolsServer,
+        },
+        canUseTool: async (toolName: string, input: any) => {
+          if (toolName === "AskUserQuestion" && nick && target) {
+            return this.handleAskUser(input, nick, target);
+          }
+          // Auto-approve everything else (permissionMode handles this, but just in case)
+          return { behavior: "allow" as const, updatedInput: input };
         },
       },
     })) {
