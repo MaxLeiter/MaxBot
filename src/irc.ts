@@ -1,5 +1,6 @@
 import { Client, type MessageEvent } from "irc-framework";
 import type { Config } from "./config.js";
+import { formatForIrc } from "./format.js";
 import * as log from "./log.js";
 
 const SEND_DELAY_MS = 500;
@@ -165,18 +166,8 @@ export class IrcClient {
     this.client.on("privmsg", handler);
   }
 
-  /** Convert literal \x02 etc. from Claude's output into actual IRC control bytes */
-  private convertFormatCodes(text: string): string {
-    return text
-      .replace(/\\x02/g, "\x02")  // bold
-      .replace(/\\x1[Dd]/g, "\x1D")  // italic
-      .replace(/\\x1[Ff]/g, "\x1F")  // underline
-      .replace(/\\x0[Ff]/g, "\x0F")  // reset
-      .replace(/\\x03/g, "\x03");    // color
-  }
-
   private enqueue(target: string, message: string) {
-    this.sendQueue.push({ target, message: this.convertFormatCodes(message) });
+    this.sendQueue.push({ target, message: formatForIrc(message) });
     if (!this.sending) this.drain();
   }
 
