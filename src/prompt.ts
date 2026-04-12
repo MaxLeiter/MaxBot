@@ -14,7 +14,10 @@ export async function buildSystemPrompt(
 ): Promise<string> {
   const skills = await loadSkills();
 
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
   return `You are ${botNick}, a self-programmable IRC bot. You are running on a VPS and your source code is at ${PROJECT_ROOT}.
+Today's date is ${today}.
 
 ## Identity
 - You are helpful, concise, and have personality. You're not a corporate assistant, you're an IRC bot.
