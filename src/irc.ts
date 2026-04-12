@@ -52,27 +52,34 @@ export class IrcClient {
   }
 
   connect(channels: string[]) {
-    this.client.connect({
+    const connectOpts: any = {
       host: this.config.host,
       port: this.config.port,
       tls: this.config.tls,
       nick: this.config.nick,
-    });
+    };
+
+    // Use SASL auth if NickServ password is set (required by some networks before registration)
+    if (this.config.nickservPassword) {
+      connectOpts.account = {
+        account: this.config.nick,
+        password: this.config.nickservPassword,
+      };
+    }
+
+    this.client.connect(connectOpts);
 
     this.client.on("registered", () => {
       log.logConnected(this.config.nick);
-
-      if (this.config.nickservPassword) {
-        this.client.say(
-          "NickServ",
-          `IDENTIFY ${this.config.nickservPassword}`
-        );
-      }
 
       for (const channel of channels) {
         this.client.join(channel);
         log.logJoin(channel);
       }
+    });
+
+    this.client.on("socket connected", () => {
+      log.logInfo("Socket connected, registering...");
     });
 
     this.client.on("reconnecting", () => {
@@ -81,6 +88,14 @@ export class IrcClient {
 
     this.client.on("close", () => {
       log.logInfo("Connection closed");
+    });
+
+    this.client.on("socket close", () => {
+      log.logInfo("Socket closed");
+    });
+
+    this.client.on("debug", (msg: string) => {
+      log.logInfo(`[debug] ${msg}`);
     });
   }
 
