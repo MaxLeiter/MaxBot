@@ -130,7 +130,20 @@ export class Agent {
     const startTime = Date.now();
     const model = getSettings().model;
 
-    const env: Record<string, string> = { ...process.env as Record<string, string> };
+    // Build env for the Claude subprocess, stripping sensitive vars
+    const SENSITIVE_KEYS = new Set([
+      "IRC_NICKSERV_PASSWORD",
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_BASE_URL",
+    ]);
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined && !SENSITIVE_KEYS.has(k)) {
+        env[k] = v;
+      }
+    }
+    // Re-add only the gateway vars Claude needs to make API calls
     if (this.config.claude.baseUrl) {
       env.ANTHROPIC_BASE_URL = this.config.claude.baseUrl;
     }
