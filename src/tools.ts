@@ -4,6 +4,7 @@ import type { IrcClient } from "./irc.js";
 import type { ContextManager } from "./context.js";
 import type { CronManager } from "./cron.js";
 import { getSettings, updateSettings } from "./settings.js";
+import * as log from "./log.js";
 
 export interface BotStats {
   queries: number;
@@ -13,6 +14,14 @@ export interface BotStats {
 
 const startedAt = Date.now();
 
+function ok(text: string) {
+  return { content: [{ type: "text" as const, text }] };
+}
+
+function fail(text: string) {
+  return { content: [{ type: "text" as const, text }], isError: true };
+}
+
 export function createIrcTools(
   irc: IrcClient,
   context: ContextManager,
@@ -21,12 +30,14 @@ export function createIrcTools(
   setModel: (model: string) => Promise<void>,
   getModel: () => string
 ) {
-  // Channels that bypass the active-channel check (cron targets)
   const allowedTargets = new Set<string>();
 
-  /** Call this before running a cron-triggered query to whitelist its target */
   function allowTarget(target: string) {
     allowedTargets.add(target.toLowerCase());
+  }
+
+  function revokeTarget(target: string) {
+    allowedTargets.delete(target.toLowerCase());
   }
 
   function checkTarget(target: string): string | null {
@@ -47,9 +58,9 @@ export function createIrcTools(
     },
     async (args) => {
       const err = checkTarget(args.target);
-      if (err) return { content: [{ type: "text" as const, text: err }], isError: true };
+      if (err) return fail(err);
       irc.say(args.target, args.message);
-      return { content: [{ type: "text" as const, text: `Sent to ${args.target}` }] };
+      return ok(`Sent to ${args.target}`);
     }
   );
 
@@ -62,9 +73,9 @@ export function createIrcTools(
     },
     async (args) => {
       const err = checkTarget(args.target);
-      if (err) return { content: [{ type: "text" as const, text: err }], isError: true };
+      if (err) return fail(err);
       irc.action(args.target, args.message);
-      return { content: [{ type: "text" as const, text: `Action in ${args.target}` }] };
+      return ok(`Action in ${args.target}`);
     }
   );
 
@@ -77,14 +88,13 @@ export function createIrcTools(
     async (args) => {
       try {
         await irc.join(args.channel);
-        // Persist to settings so we rejoin on restart
         const settings = getSettings();
         if (!settings.channels.includes(args.channel.toLowerCase())) {
           await updateSettings({ channels: [...settings.channels, args.channel] });
         }
-        return { content: [{ type: "text" as const, text: `Joined ${args.channel}` }] };
+        return ok(`Joined ${args.channel}`);
       } catch (err: any) {
-        return { content: [{ type: "text" as const, text: `Failed to join ${args.channel}: ${err.message}` }], isError: true };
+        return fail(`Failed to join ${args.channel}: ${err.message}`);
       }
     }
   );
@@ -98,12 +108,11 @@ export function createIrcTools(
     },
     async (args) => {
       irc.part(args.channel, args.reason);
-      // Remove from settings so we don't rejoin on restart
       const settings = getSettings();
       await updateSettings({
         channels: settings.channels.filter((c) => c.toLowerCase() !== args.channel.toLowerCase()),
       });
-      return { content: [{ type: "text" as const, text: `Left ${args.channel}` }] };
+      return ok(`Left ${args.channel}`);
     }
   );
 
@@ -117,11 +126,8 @@ export function createIrcTools(
     },
     async (args) => {
       const messages = context.getScrollback(args.channel, args.offset, args.count);
-      if (messages.length === 0) {
-        return { content: [{ type: "text" as const, text: "No messages found at that range." }] };
-      }
-      const formatted = context.formatMessages(messages);
-      return { content: [{ type: "text" as const, text: formatted }] };
+      if (messages.length === 0) return ok("No messages found at that range.");
+      return ok(context.formatMessages(messages));
     }
   );
 
@@ -145,7 +151,7 @@ export function createIrcTools(
 
       const cronJobs = crons.list();
       const cronLines = cronJobs.length > 0
-        ? cronJobs.map((j) => `  ${j.id}: every ${j.schedule} -> ${j.target} ("${j.prompt.slice(0, 50)}")`).join("\n")
+        ? cronJobs.map((j) => formatCronJob(j, 50)).join("\n")
         : "  (none)";
 
       const channels = irc.getChannels();
@@ -163,7 +169,7 @@ export function createIrcTools(
         cronLines,
       ].join("\n");
 
-      return { content: [{ type: "text" as const, text }] };
+      return ok(text);
     }
   );
 
@@ -176,9 +182,8 @@ export function createIrcTools(
     async (args) => {
       try {
         const res = await fetch("https://ai-gateway.vercel.sh/v1/models");
-        if (!res.ok) {
-          return { content: [{ type: "text" as const, text: `failed to fetch models list: ${res.status}` }], isError: true };
-        }
+        if (!res.ok) return fail(`failed to fetch models list: ${res.status}`);
+
         const data = await res.json() as { data?: Array<{ id: string }> };
         const validIds = (data.data ?? []).map((m: { id: string }) => m.id);
 
@@ -187,14 +192,14 @@ export function createIrcTools(
           const suggestion = matches.length > 0
             ? `\ndid you mean: ${matches.slice(0, 5).join(", ")}?`
             : "";
-          return { content: [{ type: "text" as const, text: `"${args.model}" is not a valid model.${suggestion}` }], isError: true };
+          return fail(`"${args.model}" is not a valid model.${suggestion}`);
         }
 
         const prev = getModel();
         await setModel(args.model);
-        return { content: [{ type: "text" as const, text: `model changed from ${prev} to ${args.model}` }] };
+        return ok(`model changed from ${prev} to ${args.model}`);
       } catch (err) {
-        return { content: [{ type: "text" as const, text: `error changing model: ${err}` }], isError: true };
+        return fail(`error changing model: ${err}`);
       }
     }
   );
@@ -209,7 +214,7 @@ export function createIrcTools(
     },
     async (args) => {
       const job = await crons.create(args.schedule, args.prompt, args.target, "irc");
-      return { content: [{ type: "text" as const, text: `cron ${job.id} created: every ${job.schedule} -> ${job.target}` }] };
+      return ok(`cron ${job.id} created: every ${job.schedule} -> ${job.target}`);
     }
   );
 
@@ -220,9 +225,9 @@ export function createIrcTools(
       id: z.string().describe("The cron job ID to delete"),
     },
     async (args) => {
-      const ok = await crons.remove(args.id);
-      if (!ok) return { content: [{ type: "text" as const, text: `cron ${args.id} not found` }], isError: true };
-      return { content: [{ type: "text" as const, text: `cron ${args.id} deleted` }] };
+      const removed = await crons.remove(args.id);
+      if (!removed) return fail(`cron ${args.id} not found`);
+      return ok(`cron ${args.id} deleted`);
     }
   );
 
@@ -232,13 +237,8 @@ export function createIrcTools(
     {},
     async () => {
       const jobs = crons.list();
-      if (jobs.length === 0) {
-        return { content: [{ type: "text" as const, text: "no cron jobs" }] };
-      }
-      const text = jobs
-        .map((j) => `${j.id}: every ${j.schedule} -> ${j.target} ("${j.prompt}")`)
-        .join("\n");
-      return { content: [{ type: "text" as const, text }] };
+      if (jobs.length === 0) return ok("no cron jobs");
+      return ok(jobs.map((j) => formatCronJob(j)).join("\n"));
     }
   );
 
@@ -249,8 +249,8 @@ export function createIrcTools(
       reason: z.string().optional().describe("Why you're skipping (logged, not sent to IRC)"),
     },
     async (args) => {
-      if (args.reason) console.log(`  skipped: ${args.reason}`);
-      return { content: [{ type: "text" as const, text: "__SKIP__" }] };
+      log.logSkip(args.reason);
+      return ok("__SKIP__");
     }
   );
 
@@ -260,5 +260,10 @@ export function createIrcTools(
     tools: [sendMessage, ircAction, joinChannel, partChannel, getScrollback, botStatus, changeModel, createCron, deleteCron, listCrons, skipReply],
   });
 
-  return { server, allowTarget };
+  return { server, allowTarget, revokeTarget };
+}
+
+function formatCronJob(j: { id: string; schedule: string; target: string; prompt: string }, truncate?: number): string {
+  const prompt = truncate ? j.prompt.slice(0, truncate) : j.prompt;
+  return `  ${j.id}: every ${j.schedule} -> ${j.target} ("${prompt}")`;
 }

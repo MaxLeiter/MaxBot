@@ -13,21 +13,18 @@ const irc = new IrcClient(config.irc);
 const agent = new Agent(config, irc, context, crons);
 
 const botNickLower = config.irc.nick.toLowerCase();
+const nickMentionRegex = new RegExp(`\\b${config.irc.nick}\\b`, "i");
+const nickStripRegex = new RegExp(`\\b${config.irc.nick}[,:;]?\\s*`, "gi");
 
-// Record ALL channel messages for context (not just ones addressed to the bot)
 irc.client.on("message", (event: any) => {
   if (event.nick.toLowerCase() === botNickLower) return;
   context.recordMessage(event.nick, event.target, event.message);
 });
 
-// Handle messages addressed to the bot
 irc.onMessage((event) => {
-  const nick = event.nick;
-  const target = event.target;
-  const message = event.message;
+  const { nick, target, message } = event;
 
-  const authorizedUsers = getSettings().authorizedUsers;
-  if (!authorizedUsers.includes(nick.toLowerCase())) return;
+  if (!getSettings().authorizedUsers.includes(nick.toLowerCase())) return;
 
   const isDM = target.toLowerCase() === botNickLower;
 
@@ -37,10 +34,9 @@ irc.onMessage((event) => {
     return;
   }
 
-  const nickRegex = new RegExp(`\\b${config.irc.nick}\\b`, "i");
-  if (!nickRegex.test(message)) return;
+  if (!nickMentionRegex.test(message)) return;
 
-  const stripped = message.replace(new RegExp(`\\b${config.irc.nick}[,:;]?\\s*`, "gi"), "").trim();
+  const stripped = message.replace(nickStripRegex, "").trim();
   if (!stripped) return;
 
   context.markActive(target);
