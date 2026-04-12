@@ -26,6 +26,7 @@ export async function loadSettings(): Promise<Settings> {
     const raw = await readFile(SETTINGS_FILE, "utf-8");
     const saved = JSON.parse(raw);
     current = { ...DEFAULTS, ...saved };
+    current.authorizedUsers = current.authorizedUsers.map((u) => u.toLowerCase());
     log.logInfo(`Settings loaded: model=${current.model}, channels=${current.channels.join(",")}, users=${current.authorizedUsers.join(",")}`);
   } catch {
     log.logInfo("No settings file, using defaults");
@@ -44,6 +45,9 @@ export function getSettings(): Settings {
 
 export async function updateSettings(partial: Partial<Settings>): Promise<Settings> {
   Object.assign(current, partial);
+  if (partial.authorizedUsers) {
+    current.authorizedUsers = current.authorizedUsers.map((u) => u.toLowerCase());
+  }
   await saveSettings();
   return current;
 }

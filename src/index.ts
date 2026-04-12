@@ -19,7 +19,10 @@ const nickStripRegex = new RegExp(`\\b${config.irc.nick}[,:;]?\\s*`, "gi");
 
 irc.client.on("message", (event: any) => {
   if (event.nick.toLowerCase() === botNickLower) return;
-  context.recordMessage(event.nick, event.target, event.message);
+  // For DMs, store under the sender's nick (not the bot's nick) so lookups are consistent
+  const isDM = event.target.toLowerCase() === botNickLower;
+  const storeTarget = isDM ? event.nick : event.target;
+  context.recordMessage(event.nick, storeTarget, event.message);
 });
 
 irc.onMessage((event) => {
@@ -58,7 +61,11 @@ function handleCommand(command: string, args: string, target: string) {
     case "restart":
       irc.say(target, "restarting...");
       setTimeout(() => {
-        execSync("systemctl restart maxbot", { stdio: "ignore" });
+        try {
+          execSync("sudo systemctl restart maxbot", { stdio: "ignore" });
+        } catch (err: any) {
+          log.logError("Restart failed", err.message);
+        }
       }, 500);
       break;
     case "pull":

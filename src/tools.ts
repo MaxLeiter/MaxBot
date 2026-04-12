@@ -60,6 +60,7 @@ export function createIrcTools(
       const err = checkTarget(args.target);
       if (err) return fail(err);
       irc.say(args.target, args.message);
+      context.recordMessage(irc.nick, args.target, args.message);
       return ok(`Sent to ${args.target}`);
     }
   );
@@ -75,6 +76,7 @@ export function createIrcTools(
       const err = checkTarget(args.target);
       if (err) return fail(err);
       irc.action(args.target, args.message);
+      context.recordMessage(irc.nick, args.target, `\x01ACTION ${args.message}\x01`);
       return ok(`Action in ${args.target}`);
     }
   );

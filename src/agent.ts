@@ -62,6 +62,8 @@ export class Agent {
     if (config.claude.authToken) {
       this.env.ANTHROPIC_AUTH_TOKEN = config.claude.authToken;
       this.env.ANTHROPIC_API_KEY = "";
+    } else if (process.env.ANTHROPIC_API_KEY) {
+      this.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     }
 
     crons.onFire(async (job) => {
@@ -134,6 +136,7 @@ export class Agent {
       if (result && !result.includes("__SKIP__")) {
         log.logReply(target, result);
         this.irc.say(target, result);
+        this.context.recordMessage(this.config.irc.nick, target, result);
       }
     } catch (err: any) {
       const errStr = String(err?.message ?? err);
@@ -178,6 +181,8 @@ export class Agent {
           "mcp__irc__delete_cron",
           "mcp__irc__list_crons",
           "mcp__irc__skip_reply",
+          "WebSearch",
+          "WebFetch",
         ],
         disallowedTools: [
           "CronCreate",

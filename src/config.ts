@@ -29,7 +29,7 @@ export function loadConfig(): Config {
       tls: env("IRC_TLS", "true") === "true",
       nick: env("IRC_NICK", "MaxBot"),
       username: env("IRC_USERNAME", "maxbot"),
-      nickservPassword: env("IRC_NICKSERV_PASSWORD"),
+      nickservPassword: process.env.IRC_NICKSERV_PASSWORD || undefined,
     },
     claude: {
       maxTurns: parseInt(env("CLAUDE_MAX_TURNS", "15")),
