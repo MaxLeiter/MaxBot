@@ -26,6 +26,7 @@ export class Agent {
   private totalTokens = 0;
   private queryCount = 0;
   private env: Record<string, string>;
+  debug = false;
 
   constructor(config: Config, irc: IrcClient, context: ContextManager, crons: CronManager) {
     this.config = config;
@@ -130,7 +131,7 @@ export class Agent {
     log.logMessage(target, nick, message);
 
     try {
-      const result = await this.runQuery(systemPrompt, userPrompt);
+      const result = await this.runQuery(systemPrompt, userPrompt, target);
       if (result && !result.includes("__SKIP__")) {
         log.logReply(target, result);
         this.irc.say(target, result);
@@ -143,7 +144,7 @@ export class Agent {
     }
   }
 
-  private async runQuery(systemPrompt: string, prompt: string): Promise<string | null> {
+  private async runQuery(systemPrompt: string, prompt: string, target?: string): Promise<string | null> {
     let resultText: string | null = null;
     const startTime = Date.now();
     const model = getSettings().model;
@@ -194,8 +195,21 @@ export class Agent {
         for (const block of message.message.content as any[]) {
           if (block.type === "text" && block.text) {
             log.logThinking(block.text);
+            if (this.debug && target) {
+              const preview = block.text.length > 120 ? block.text.slice(0, 120) + "..." : block.text;
+              this.irc.action(target, `thinks: ${preview}`);
+            }
           } else if (block.type === "tool_use") {
             log.logToolCall(block.name, block.input);
+            if (this.debug && target) {
+              const name = block.name.replace("mcp__irc__", "").replace("mcp__", "");
+              const args = block.input ? Object.entries(block.input)
+                .map(([k, v]) => {
+                  const s = String(v);
+                  return `${k}=${s.length > 40 ? s.slice(0, 40) + "..." : s}`;
+                }).join(" ") : "";
+              this.irc.action(target, `uses ${name} ${args}`.trim());
+            }
           }
         }
       }

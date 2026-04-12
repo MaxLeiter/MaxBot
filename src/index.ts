@@ -85,8 +85,12 @@ function handleCommand(command: string, args: string, target: string) {
         irc.say(target, `model: ${getSettings().model}`);
       }
       break;
+    case "debug":
+      agent.debug = !agent.debug;
+      irc.say(target, `debug mode ${agent.debug ? "on" : "off"}`);
+      break;
     case "help":
-      irc.say(target, "commands: !restart, !pull, !status, !model, !help");
+      irc.say(target, "commands: !restart, !pull, !status, !model, !debug, !help");
       break;
     default:
       irc.say(target, `unknown command: !${command}. try !help`);
