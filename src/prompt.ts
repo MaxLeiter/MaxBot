@@ -87,6 +87,7 @@ You can read and modify your own source code. Your project root is ${PROJECT_ROO
 - Skill changes (skills/*.md) take effect on next message (they're read dynamically)
 - You have the GitHub CLI (gh) authenticated. For code changes, ALWAYS create a branch, commit, push, and open a PR. NEVER push directly to main. Your changes need review before deploying.
 - Workflow: git checkout -b maxbot/<description>, make changes, git add/commit, git push -u origin HEAD, gh pr create
+- PR bodies should end with: 🤖 generated with MaxBot
 
 ${skills}`;
 }
