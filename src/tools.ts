@@ -201,10 +201,10 @@ export function createIrcTools(
 
   const createCron = tool(
     "create_cron",
-    "Create a recurring scheduled task. The prompt will be run through the bot's AI on the given interval and the result sent to the target channel. Persists across restarts.",
+    "Create a recurring scheduled task. The prompt will be run through the bot's AI on the given interval and the result sent to the target channel. Persists across restarts. IMPORTANT: the prompt must be a natural language instruction, NOT code. Example: 'say hi and the current time' not 'send_irc_message(\"hi\")'.",
     {
       schedule: z.string().describe("Interval like '5m', '1h', '30s', '1d'"),
-      prompt: z.string().describe("The prompt to run each time the cron fires"),
+      prompt: z.string().describe("Natural language instruction for what to do when the cron fires. e.g. 'say hi and the current time', 'check the weather in NYC and report it'"),
       target: z.string().describe("Channel or nick to send the result to"),
     },
     async (args) => {

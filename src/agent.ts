@@ -58,30 +58,36 @@ export class Agent {
     };
   }
 
-  // Per-target message queues — process one at a time to avoid spawning
-  // parallel Claude processes on a memory-constrained box
-  private queues = new Map<string, Array<{ nick: string; target: string; message: string }>>();
+  // Per-target message queues — if a query is already running, buffer new
+  // messages and concat them into one prompt when the current one finishes
+  private pending = new Map<string, Array<{ nick: string; message: string }>>();
   private processing = new Set<string>();
 
   async handleMessage(nick: string, target: string, message: string) {
     const key = target.toLowerCase();
-    if (!this.queues.has(key)) this.queues.set(key, []);
-    this.queues.get(key)!.push({ nick, target, message });
 
-    if (!this.processing.has(key)) {
-      this.processQueue(key);
+    if (this.processing.has(key)) {
+      // Query already running for this target — buffer it
+      if (!this.pending.has(key)) this.pending.set(key, []);
+      this.pending.get(key)!.push({ nick, message });
+      log.logInfo(`Queued message from ${nick} in ${target} (query in progress)`);
+      return;
     }
-  }
 
-  private async processQueue(key: string) {
     this.processing.add(key);
-    const queue = this.queues.get(key)!;
+    await this.processMessage(nick, target, message);
 
-    while (queue.length > 0) {
-      const { nick, target, message } = queue.shift()!;
-      await this.processMessage(nick, target, message);
+    // Drain any messages that arrived while we were processing
+    while (this.pending.has(key) && this.pending.get(key)!.length > 0) {
+      const queued = this.pending.get(key)!.splice(0);
+      // Concat all queued messages into one prompt
+      const combined = queued.map((m) => `<${m.nick}> ${m.message}`).join("\n");
+      const lastNick = queued[queued.length - 1].nick;
+      log.logInfo(`Processing ${queued.length} batched messages in ${target}`);
+      await this.processMessage(lastNick, target, combined);
     }
 
+    this.pending.delete(key);
     this.processing.delete(key);
   }
 
