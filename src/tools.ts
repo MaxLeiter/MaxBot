@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { IrcClient } from "./irc.js";
 import type { ContextManager } from "./context.js";
 import type { CronManager } from "./cron.js";
+import { getSettings, updateSettings } from "./settings.js";
 
 export interface BotStats {
   queries: number;
@@ -76,6 +77,11 @@ export function createIrcTools(
     async (args) => {
       try {
         await irc.join(args.channel);
+        // Persist to settings so we rejoin on restart
+        const settings = getSettings();
+        if (!settings.channels.includes(args.channel.toLowerCase())) {
+          await updateSettings({ channels: [...settings.channels, args.channel] });
+        }
         return { content: [{ type: "text" as const, text: `Joined ${args.channel}` }] };
       } catch (err: any) {
         return { content: [{ type: "text" as const, text: `Failed to join ${args.channel}: ${err.message}` }], isError: true };
@@ -92,6 +98,11 @@ export function createIrcTools(
     },
     async (args) => {
       irc.part(args.channel, args.reason);
+      // Remove from settings so we don't rejoin on restart
+      const settings = getSettings();
+      await updateSettings({
+        channels: settings.channels.filter((c) => c.toLowerCase() !== args.channel.toLowerCase()),
+      });
       return { content: [{ type: "text" as const, text: `Left ${args.channel}` }] };
     }
   );
