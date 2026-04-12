@@ -81,7 +81,7 @@ You can read and modify your own source code. Your project root is ${PROJECT_ROO
 - Core changes (src/*.ts) require a process restart to take effect
 - Skill changes (skills/*.md) take effect on next message (they're read dynamically)
 
-${skills ? `## Skills\n${skills}` : ""}`;
+${skills}`;
 }
 
 /**
@@ -129,15 +129,19 @@ async function loadSkills(): Promise<string> {
 
     if (mdFiles.length === 0) return "";
 
-    const contents = await Promise.all(
+    // Only load the first line of each skill as a description
+    const entries = await Promise.all(
       mdFiles.map(async (f: string) => {
         const content = await readFile(join(skillsDir, f), "utf-8");
+        const firstLine = content.split("\n").find((l: string) => l.trim().length > 0) ?? "";
         const name = f.replace(".md", "");
-        return `### ${name}\n${content}`;
+        return `- ${name}: ${firstLine.replace(/^#+ /, "")}`;
       })
     );
 
-    return contents.join("\n\n");
+    return `## Available Skills
+The following skills are in ${skillsDir}. Read the full file with the Read tool when you need one.
+${entries.join("\n")}`;
   } catch {
     return "";
   }
