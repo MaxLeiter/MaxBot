@@ -29,6 +29,9 @@ echo "=== Installing GitHub CLI ==="
 echo "=== Creating maxbot user ==="
 id -u maxbot &>/dev/null || useradd -m -s /bin/bash maxbot
 
+GIT_NAME="MaxBot"
+GIT_EMAIL="maxwell.leiter+maxbot@gmail.com"
+
 echo "=== Cloning repo ==="
 REPO_DIR="/opt/maxbot"
 if [ -d "$REPO_DIR" ]; then
@@ -37,6 +40,13 @@ if [ -d "$REPO_DIR" ]; then
 else
   git clone https://github.com/MaxLeiter/MaxBot.git "$REPO_DIR"
 fi
+
+echo "=== Configuring git identity ==="
+git config --global user.name "$GIT_NAME"
+git config --global user.email "$GIT_EMAIL"
+
+su - maxbot -c "git config --global user.name \"$GIT_NAME\""
+su - maxbot -c "git config --global user.email \"$GIT_EMAIL\""
 
 echo "=== Installing bun for maxbot user ==="
 su - maxbot -c 'curl -fsSL https://bun.sh/install | bash'
