@@ -1,0 +1,14 @@
+FROM oven/bun:1 AS base
+WORKDIR /app
+
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
+
+COPY src/ src/
+COPY types/ types/
+COPY skills/ skills/
+COPY CLAUDE.md ./
+
+RUN mkdir -p data
+
+CMD ["bun", "run", "src/index.ts"]

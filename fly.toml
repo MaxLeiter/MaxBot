@@ -1,0 +1,16 @@
+app = "maxbot-irc"
+primary_region = "iad"
+
+[build]
+
+[mounts]
+  source = "maxbot_data"
+  destination = "/app/data"
+
+[env]
+  IRC_HOST = "irc.libera.chat"
+  IRC_PORT = "6697"
+  IRC_TLS = "true"
+  IRC_NICK = "MaxBot"
+  IRC_USERNAME = "maxbot"
+  CLAUDE_MAX_TURNS = "25"
