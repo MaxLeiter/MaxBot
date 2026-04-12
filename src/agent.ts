@@ -26,6 +26,7 @@ export class Agent {
   private totalTokens = 0;
   private queryCount = 0;
   private env: Record<string, string>;
+  private sensitiveValues: string[];
 
   constructor(config: Config, irc: IrcClient, context: ContextManager, crons: CronManager) {
     this.config = config;
@@ -66,6 +67,11 @@ export class Agent {
       this.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     }
 
+    // Collect actual secret values for scrubbing debug output
+    this.sensitiveValues = [...SENSITIVE_KEYS]
+      .map((k) => process.env[k])
+      .filter((v): v is string => !!v && v.length > 3);
+
     crons.onFire(async (job) => {
       log.logCron(job.id, job.prompt, job.target);
       this.allowTarget(job.target);
@@ -80,6 +86,14 @@ export class Agent {
   private async setModel(model: string) {
     await updateSettings({ model });
     log.logInfo(`Model changed to: ${model}`);
+  }
+
+  private scrub(text: string): string {
+    let result = text;
+    for (const secret of this.sensitiveValues) {
+      result = result.replaceAll(secret, "[REDACTED]");
+    }
+    return result;
   }
 
   getStats() {
@@ -200,19 +214,20 @@ export class Agent {
           if (block.type === "text" && block.text) {
             log.logThinking(block.text);
             if (getSettings().debug && target) {
-              const preview = block.text.length > 120 ? block.text.slice(0, 120) + "..." : block.text;
-              this.irc.action(target, `thinks: ${preview}`);
+              const raw = block.text.length > 120 ? block.text.slice(0, 120) + "..." : block.text;
+              const preview = this.scrub(raw).replace(/[\r\n]+/g, " ").trim();
+              if (preview) this.irc.action(target, `thinks: ${preview}`);
             }
           } else if (block.type === "tool_use") {
             log.logToolCall(block.name, block.input);
             if (getSettings().debug && target) {
               const name = block.name.replace("mcp__irc__", "").replace("mcp__", "");
-              const args = block.input ? Object.entries(block.input)
+              const args = block.input ? " " + Object.entries(block.input)
                 .map(([k, v]) => {
-                  const s = String(v);
+                  const s = this.scrub(String(v));
                   return `${k}=${s.length > 40 ? s.slice(0, 40) + "..." : s}`;
                 }).join(" ") : "";
-              this.irc.action(target, `uses ${name} ${args}`.trim());
+              this.irc.action(target, `uses ${name}${args}`);
             }
           }
         }

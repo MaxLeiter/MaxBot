@@ -28,7 +28,7 @@ irc.client.on("message", (event: any) => {
 irc.onMessage((event) => {
   const { nick, target, message } = event;
 
-  if (!getSettings().authorizedUsers.includes(nick.toLowerCase())) return;
+  if (!getSettings().authorizedUsers.some(u => u.toLowerCase() === nick.toLowerCase())) return;
 
   const isDM = target.toLowerCase() === botNickLower;
   const replyTarget = isDM ? nick : target;
