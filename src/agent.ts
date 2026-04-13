@@ -312,7 +312,7 @@ export class Agent {
                   const s = this.scrub(String(v));
                   return `${k}=${s.length > 40 ? s.slice(0, 40) + "..." : s}`;
                 }).join(" ") : "";
-              this.irc.action(target, `uses ${name}${args}`);
+              this.irc.action(target, `used ${name}${args}`);
             }
           }
         }

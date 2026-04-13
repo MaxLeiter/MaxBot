@@ -32,7 +32,7 @@ export function loadConfig(): Config {
       nickservPassword: process.env.IRC_NICKSERV_PASSWORD || undefined,
     },
     claude: {
-      maxTurns: parseInt(env("CLAUDE_MAX_TURNS", "25")),
+      maxTurns: parseInt(env("CLAUDE_MAX_TURNS", "50")),
       baseUrl: process.env.ANTHROPIC_BASE_URL || undefined,
       authToken: process.env.ANTHROPIC_AUTH_TOKEN || undefined,
     },
