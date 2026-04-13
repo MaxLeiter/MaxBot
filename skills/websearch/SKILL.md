@@ -1,3 +1,8 @@
+---
+name: websearch
+description: Search the web for current information. Use when the user asks about recent events, live status, pricing, docs, or anything likely newer than training data.
+---
+
 # websearch
 
 use this skill when the user wants current information from the web, or asks you to search online.

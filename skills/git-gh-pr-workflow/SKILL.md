@@ -1,3 +1,8 @@
+---
+name: git-gh-pr-workflow
+description: Safe git and GitHub PR workflow for self-modification. Use when making code changes to MaxBot that need to be committed, pushed, and reviewed.
+---
+
 # git-gh-pr-workflow
 
 use this skill when you're making code changes to maxbot itself and need to use git and gh safely.

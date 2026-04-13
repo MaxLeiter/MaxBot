@@ -1,3 +1,5 @@
-Skills are markdown files in this directory. They are automatically loaded into MaxBot's system prompt and provide guidance, knowledge, and instructions that shape how the bot responds.
+Skills follow the [Agent Skills](https://agentskills.io) open format.
 
-To add a skill, create a new .md file here. It takes effect on the next message — no restart needed.
+Each skill is a directory containing a `SKILL.md` file with YAML frontmatter (`name`, `description`) and markdown instructions. Optional subdirectories (`scripts/`, `references/`, `assets/`) can hold supporting files.
+
+To add a skill, create a new directory here with a `SKILL.md`. It takes effect on the next message — no restart needed.

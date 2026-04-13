@@ -8,9 +8,9 @@ Self-programmable IRC bot. TypeScript, bun, irc-framework, Claude Agent SDK.
 - `src/agent.ts` — Claude Agent SDK query orchestration
 - `src/tools.ts` — IRC action tools (send_message, action, join, part, scrollback)
 - `src/context.ts` — sliding window message buffer + active channel tracking
-- `src/prompt.ts` — system prompt builder (reads skills/*.md)
+- `src/prompt.ts` — system prompt builder (reads skills/*/SKILL.md)
 - `src/config.ts` — env var config loading
-- `skills/` — markdown files with guidance/knowledge for the bot
+- `skills/` — Agent Skills (agentskills.io format) with guidance/knowledge for the bot
 - `types/irc-framework.d.ts` — type declarations for irc-framework
 
 ## Conventions
@@ -20,7 +20,7 @@ Self-programmable IRC bot. TypeScript, bun, irc-framework, Claude Agent SDK.
 - Always git commit after making changes
 
 ## Adding a Skill
-Create a markdown file in `skills/`. It will be automatically included in the system prompt on the next message. No code changes needed.
+Create a directory in `skills/` with a `SKILL.md` file (Agent Skills format). It will be automatically discovered on the next message. No code changes needed. See `docs/skills.md` for details.
 
 ## Modifying Core Code
 Changes to `src/*.ts` require a process restart (`sudo systemctl restart maxbot`). Be conservative with core changes — test carefully.

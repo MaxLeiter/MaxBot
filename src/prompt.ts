@@ -127,29 +127,45 @@ async function loadChannelMemory(target: string): Promise<string | null> {
   }
 }
 
+/** Parse YAML frontmatter from a SKILL.md file */
+function parseFrontmatter(content: string): { name?: string; description?: string } {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return {};
+  const yaml = match[1];
+  const name = yaml.match(/^name:\s*(.+)$/m)?.[1]?.trim();
+  const description = yaml.match(/^description:\s*(.+)$/m)?.[1]?.trim();
+  return { name, description };
+}
+
 async function loadSkills(): Promise<string> {
   const skillsDir = join(PROJECT_ROOT, "skills");
   try {
-    const files = await readdir(skillsDir);
-    const mdFiles = files.filter(
-      (f: string) => f.endsWith(".md") && f !== "README.md"
-    );
+    const entries = await readdir(skillsDir, { withFileTypes: true });
+    const skillDirs = entries.filter((e) => e.isDirectory());
 
-    if (mdFiles.length === 0) return "";
+    if (skillDirs.length === 0) return "";
 
-    // Only load the first line of each skill as a description
-    const entries = await Promise.all(
-      mdFiles.map(async (f: string) => {
-        const content = await readFile(join(skillsDir, f), "utf-8");
-        const firstLine = content.split("\n").find((l: string) => l.trim().length > 0) ?? "";
-        const name = f.replace(".md", "");
-        return `- ${name}: ${firstLine.replace(/^#+ /, "")}`;
+    const skills = await Promise.all(
+      skillDirs.map(async (dir) => {
+        const skillFile = join(skillsDir, dir.name, "SKILL.md");
+        try {
+          const content = await readFile(skillFile, "utf-8");
+          const fm = parseFrontmatter(content);
+          const name = fm.name ?? dir.name;
+          const description = fm.description ?? content.split("\n").find((l: string) => l.trim().length > 0)?.replace(/^#+ /, "") ?? "";
+          return `- ${name}: ${description}`;
+        } catch {
+          return null;
+        }
       })
     );
 
+    const valid = skills.filter(Boolean);
+    if (valid.length === 0) return "";
+
     return `## Available Skills
-The following skills are in ${skillsDir}. Read the full file with the Read tool when you need one.
-${entries.join("\n")}`;
+The following skills are in ${skillsDir}. Read the full SKILL.md file with the Read tool when you need one.
+${valid.join("\n")}`;
   } catch {
     return "";
   }
