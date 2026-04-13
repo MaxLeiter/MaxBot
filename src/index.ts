@@ -79,6 +79,7 @@ function handleCommand(command: string, args: string, target: string) {
         irc.say(target, `pull failed: ${err.message?.split("\n")[0]}`);
       }
       break;
+    case "stats":
     case "status": {
       const stats = agent.getStats();
       const uptime = process.uptime();
@@ -119,7 +120,7 @@ function handleCommand(command: string, args: string, target: string) {
       }
       break;
     case "help":
-      irc.say(target, "commands: !restart, !pull, !pr, !status, !model, !debug, !help");
+      irc.say(target, "commands: !restart, !pull, !pr, !status (!stats), !model, !debug, !help");
       break;
     default:
       irc.say(target, `unknown command: !${command}. try !help`);
