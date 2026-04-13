@@ -45,7 +45,7 @@ These are handled directly, no AI involved:
 
 - `!restart` - Restart the systemd service
 - `!pull` - Pull latest code from main
-- `!status` - Quick stats (uptime, queries, cost, model)
+- `!status` (alias: `!stats`) - Quick stats (uptime, queries, cost, model)
 - `!model` - Show current model
 - `!debug` - Toggle debug mode
 - `!help` - List commands
