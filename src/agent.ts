@@ -209,14 +209,20 @@ export class Agent {
 
     log.logMessage(target, nick, message);
 
+    // Consume the msgid before the query starts (for reply tagging)
+    const replyMsgId = this.irc.consumeMsgId(target);
+
+    this.irc.startTyping(target);
     try {
       const result = await this.runQuery(systemPrompt, userPrompt, nick, target);
+      this.irc.stopTyping(target);
       if (result && !result.includes("__SKIP__")) {
         log.logReply(target, result);
-        this.irc.say(target, result);
+        this.irc.say(target, result, replyMsgId);
         this.context.recordMessage(this.config.irc.nick, target, result);
       }
     } catch (err: any) {
+      this.irc.stopTyping(target);
       const errStr = String(err?.message ?? err);
       log.logError("Agent query failed", errStr);
       const model = settings.model;

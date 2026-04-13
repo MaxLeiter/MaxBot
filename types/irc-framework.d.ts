@@ -107,6 +107,10 @@ declare module "irc-framework" {
     say(target: string, message: string, tags?: Record<string, string>): void;
     notice(target: string, message: string): void;
     action(target: string, message: string): void;
+    tagmsg(target: string, tags: Record<string, string>): void;
+
+    requestCap(cap: string | string[]): void;
+    request_extra_caps: string[];
 
     join(channel: string, key?: string): void;
     part(channel: string, message?: string): void;

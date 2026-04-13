@@ -26,12 +26,14 @@ irc.client.on("message", (event: any) => {
 });
 
 irc.onMessage((event) => {
-  const { nick, target, message } = event;
+  const { nick, target, message, tags } = event;
 
-  if (!getSettings().authorizedUsers.some(u => u.toLowerCase() === nick.toLowerCase())) return;
-
+  // Track msgid for reply support
   const isDM = target.toLowerCase() === botNickLower;
   const replyTarget = isDM ? nick : target;
+  if (tags) irc.trackMsgId(replyTarget, tags);
+
+  if (!getSettings().authorizedUsers.some((u: string) => u.toLowerCase() === nick.toLowerCase())) return;
 
   // Extract message after nick mention
   let stripped: string;

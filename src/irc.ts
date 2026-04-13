@@ -5,13 +5,16 @@ import * as log from "./log.js";
 
 const SEND_DELAY_MS = 500;
 const MAX_LINES = 50;
+const TYPING_INTERVAL_MS = 3000; // IRCv3 spec: no more than one per 3 seconds
 
 export class IrcClient {
   public client: Client;
   private config: Config["irc"];
-  private sendQueue: Array<{ target: string; message: string }> = [];
+  private sendQueue: Array<{ target: string; message: string; tags?: Record<string, string> }> = [];
   private sending = false;
   private joinedChannels = new Set<string>();
+  private typingTimers = new Map<string, ReturnType<typeof setInterval>>();
+  private lastMsgIds = new Map<string, string>(); // target -> last msgid from a user message
 
   constructor(config: Config["irc"]) {
     this.config = config;
@@ -25,6 +28,10 @@ export class IrcClient {
       ping_interval: 30,
       ping_timeout: 120,
     });
+
+    // Request IRCv3 capabilities
+    this.client.requestCap("message-tags");
+    this.client.requestCap("echo-message");
 
     // Track channel membership
     this.client.on("join", (event: any) => {
@@ -46,6 +53,50 @@ export class IrcClient {
 
   getChannels(): string[] {
     return [...this.joinedChannels];
+  }
+
+  /** Store the msgid of a user's message so we can reply to it */
+  trackMsgId(target: string, tags: Record<string, string>) {
+    const msgid = tags?.msgid;
+    if (msgid) {
+      this.lastMsgIds.set(target.toLowerCase(), msgid);
+    }
+  }
+
+  /** Get the last tracked msgid for a target, and clear it (one-shot reply) */
+  consumeMsgId(target: string): string | undefined {
+    const key = target.toLowerCase();
+    const id = this.lastMsgIds.get(key);
+    this.lastMsgIds.delete(key);
+    return id;
+  }
+
+  /** Start sending typing indicators to a target */
+  startTyping(target: string) {
+    const key = target.toLowerCase();
+    if (this.typingTimers.has(key)) return;
+
+    // Send immediately, then every 3 seconds (per spec)
+    this.sendTyping(target, "active");
+    const timer = setInterval(() => {
+      this.sendTyping(target, "active");
+    }, TYPING_INTERVAL_MS);
+    this.typingTimers.set(key, timer);
+  }
+
+  /** Stop sending typing indicators to a target */
+  stopTyping(target: string) {
+    const key = target.toLowerCase();
+    const timer = this.typingTimers.get(key);
+    if (timer) {
+      clearInterval(timer);
+      this.typingTimers.delete(key);
+    }
+    this.sendTyping(target, "done");
+  }
+
+  private sendTyping(target: string, state: "active" | "paused" | "done") {
+      this.client.tagmsg(target, { "+typing": state });
   }
 
   get nick(): string {
@@ -100,13 +151,15 @@ export class IrcClient {
     });
   }
 
-  say(target: string, message: string) {
+  say(target: string, message: string, replyToMsgId?: string) {
     const lines = message.split("\n").filter((l) => l.length > 0);
     const truncated = lines.length > MAX_LINES;
     const toSend = lines.slice(0, MAX_LINES);
 
-    for (const line of toSend) {
-      this.enqueue(target, line);
+    // Only attach +reply tag to the first line
+    const tags = replyToMsgId ? { "+reply": replyToMsgId } : undefined;
+    for (let i = 0; i < toSend.length; i++) {
+      this.enqueue(target, toSend[i], i === 0 ? tags : undefined);
     }
 
     if (truncated) {
@@ -191,16 +244,16 @@ export class IrcClient {
     });
   }
 
-  private enqueue(target: string, message: string) {
-    this.sendQueue.push({ target, message: formatForIrc(message) });
+  private enqueue(target: string, message: string, tags?: Record<string, string>) {
+    this.sendQueue.push({ target, message: formatForIrc(message), tags });
     if (!this.sending) this.drain();
   }
 
   private async drain() {
     this.sending = true;
     while (this.sendQueue.length > 0) {
-      const { target, message } = this.sendQueue.shift()!;
-      this.client.say(target, message);
+      const { target, message, tags } = this.sendQueue.shift()!;
+      this.client.say(target, message, tags);
       if (this.sendQueue.length > 0) {
         await new Promise((r) => setTimeout(r, SEND_DELAY_MS));
       }
