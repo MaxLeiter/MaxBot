@@ -101,8 +101,25 @@ function handleCommand(command: string, args: string, target: string) {
       irc.say(target, `debug mode ${newDebug ? "on" : "off"}`);
       break;
     }
+    case "pr":
+      try {
+        execSync("git -C /opt/maxbot checkout -- . && git -C /opt/maxbot checkout main 2>&1", { encoding: "utf-8" });
+        const prOut = execSync("git -C /opt/maxbot pull --ff-only origin main 2>&1", { encoding: "utf-8" }).trim();
+        irc.say(target, prOut.split("\n").slice(0, 3).join(" | "));
+        irc.say(target, "restarting...");
+        setTimeout(() => {
+          try {
+            execSync("sudo systemctl restart maxbot", { stdio: "ignore" });
+          } catch (err: any) {
+            log.logError("Restart failed", err.message);
+          }
+        }, 500);
+      } catch (err: any) {
+        irc.say(target, `pull failed: ${err.message?.split("\n")[0]}`);
+      }
+      break;
     case "help":
-      irc.say(target, "commands: !restart, !pull, !status, !model, !debug, !help");
+      irc.say(target, "commands: !restart, !pull, !pr, !status, !model, !debug, !help");
       break;
     default:
       irc.say(target, `unknown command: !${command}. try !help`);
