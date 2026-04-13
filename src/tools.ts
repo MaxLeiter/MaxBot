@@ -244,6 +244,20 @@ export function createIrcTools(
     }
   );
 
+  const createReminder = tool(
+    "create_reminder",
+    "Set a one-time reminder. After the delay, the prompt is run through the AI and the result is sent to the target. The reminder auto-deletes after firing. Use this when someone says 'remind me in...' or 'in 2 hours tell me...'.",
+    {
+      delay: z.string().describe("How long from now, e.g. '30m', '4h', '1d'"),
+      prompt: z.string().describe("Natural language instruction for what to say when the reminder fires. Include who asked if relevant, e.g. 'remind maxleiter that the deploy window opens'"),
+      target: z.string().describe("Channel or nick to send the reminder to"),
+    },
+    async (args) => {
+      const job = await crons.create(args.delay, args.prompt, args.target, "irc", true);
+      return ok(`reminder ${job.id} set: in ${args.delay} -> ${args.target}`);
+    }
+  );
+
   const skipReply = tool(
     "skip_reply",
     "Choose not to reply to the current message. Use this when being mentioned doesn't warrant a response, e.g. someone is just talking about you, not to you.",
@@ -259,7 +273,7 @@ export function createIrcTools(
   const server = createSdkMcpServer({
     name: "irc",
     version: "1.0.0",
-    tools: [sendMessage, ircAction, joinChannel, partChannel, getScrollback, botStatus, changeModel, createCron, deleteCron, listCrons, skipReply],
+    tools: [sendMessage, ircAction, joinChannel, partChannel, getScrollback, botStatus, changeModel, createCron, deleteCron, listCrons, createReminder, skipReply],
   });
 
   return { server, allowTarget, revokeTarget };

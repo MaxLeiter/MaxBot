@@ -7,11 +7,13 @@ const CRONS_FILE = join(DATA_DIR, "crons.json");
 
 export interface CronJob {
   id: string;
-  schedule: string; // cron expression or simple interval like "5m", "1h"
+  schedule: string; // simple interval like "5m", "1h"
   prompt: string; // what to send to claude when it fires
   target: string; // channel or nick to respond in
   createdBy: string; // who created it
   createdAt: number;
+  once?: boolean; // if true, fires once then auto-deletes (used for reminders)
+  fireAt?: number; // absolute timestamp for one-shot jobs (computed on create)
 }
 
 type CronHandler = (job: CronJob) => Promise<void>;
@@ -46,8 +48,9 @@ export class CronManager {
     }
   }
 
-  async create(schedule: string, prompt: string, target: string, createdBy: string): Promise<CronJob> {
+  async create(schedule: string, prompt: string, target: string, createdBy: string, once = false): Promise<CronJob> {
     const id = Math.random().toString(36).slice(2, 8);
+    const ms = parseInterval(schedule);
     const job: CronJob = {
       id,
       schedule,
@@ -55,6 +58,8 @@ export class CronManager {
       target,
       createdBy,
       createdAt: Date.now(),
+      once: once || undefined,
+      fireAt: once && ms ? Date.now() + ms : undefined,
     };
     this.jobs.push(job);
     this.schedule(job);
@@ -85,15 +90,40 @@ export class CronManager {
       log.logError(`Invalid cron schedule: ${job.schedule} (job ${job.id})`);
       return;
     }
-    log.logInfo(`Scheduling cron ${job.id}: every ${job.schedule} -> ${job.target}`);
-    const timer = setInterval(() => {
-      if (this.handler) {
-        this.handler(job).catch((err) =>
-          log.logError(`Cron ${job.id} failed:`, err)
-        );
+
+    if (job.once) {
+      // One-shot: compute remaining delay from the absolute fireAt timestamp
+      const remaining = (job.fireAt ?? Date.now() + ms) - Date.now();
+      if (remaining <= 0) {
+        // Already past due (e.g. bot was down), fire immediately then clean up
+        log.logInfo(`Reminder ${job.id} is past due, firing now -> ${job.target}`);
+        if (this.handler) {
+          this.handler(job).then(() => this.remove(job.id)).catch((err) =>
+            log.logError(`Reminder ${job.id} failed:`, err)
+          );
+        }
+        return;
       }
-    }, ms);
-    this.timers.set(job.id, timer);
+      log.logInfo(`Scheduling reminder ${job.id}: in ${job.schedule} -> ${job.target}`);
+      const timer = setTimeout(() => {
+        if (this.handler) {
+          this.handler(job).then(() => this.remove(job.id)).catch((err) =>
+            log.logError(`Reminder ${job.id} failed:`, err)
+          );
+        }
+      }, remaining);
+      this.timers.set(job.id, timer);
+    } else {
+      log.logInfo(`Scheduling cron ${job.id}: every ${job.schedule} -> ${job.target}`);
+      const timer = setInterval(() => {
+        if (this.handler) {
+          this.handler(job).catch((err) =>
+            log.logError(`Cron ${job.id} failed:`, err)
+          );
+        }
+      }, ms);
+      this.timers.set(job.id, timer);
+    }
   }
 
   stopAll() {

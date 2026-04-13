@@ -264,6 +264,7 @@ export class Agent {
           "mcp__irc__create_cron",
           "mcp__irc__delete_cron",
           "mcp__irc__list_crons",
+          "mcp__irc__create_reminder",
           "mcp__irc__skip_reply",
           "WebSearch",
           "WebFetch",
