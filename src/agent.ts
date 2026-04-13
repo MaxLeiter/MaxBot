@@ -142,17 +142,17 @@ export class Agent {
     };
   }
 
-  private pending = new Map<string, Array<{ nick: string; message: string }>>();
+  private pending = new Map<string, Array<{ nick: string; message: string; modelOverride?: string }>>();
   private processing = new Set<string>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   private static DEBOUNCE_MS = 600;
 
-  async handleMessage(nick: string, target: string, message: string) {
+  async handleMessage(nick: string, target: string, message: string, modelOverride?: string) {
     const key = target.toLowerCase();
 
     if (!this.pending.has(key)) this.pending.set(key, []);
-    this.pending.get(key)!.push({ nick, message });
+    this.pending.get(key)!.push({ nick, message, modelOverride });
 
     // If already processing a query for this target, messages just accumulate in pending
     if (this.processing.has(key)) {
@@ -178,6 +178,9 @@ export class Agent {
       let combinedNick: string;
       let combinedMessage: string;
 
+      // Use the last message's model override (most recent wins)
+      const modelOverride = [...queued].reverse().find((m) => m.modelOverride)?.modelOverride;
+
       if (queued.length === 1) {
         combinedNick = queued[0].nick;
         combinedMessage = queued[0].message;
@@ -189,14 +192,14 @@ export class Agent {
 
       // Recover original target casing from the first message
       const target = queued[0].message ? key : key;
-      await this.processMessage(combinedNick, target, combinedMessage);
+      await this.processMessage(combinedNick, target, combinedMessage, modelOverride);
     }
 
     this.pending.delete(key);
     this.processing.delete(key);
   }
 
-  private async processMessage(nick: string, target: string, message: string) {
+  private async processMessage(nick: string, target: string, message: string, modelOverride?: string) {
     const settings = getSettings();
     const systemPrompt = await buildSystemPrompt(
       this.config.irc.nick,
@@ -214,7 +217,7 @@ export class Agent {
 
     this.irc.startTyping(target);
     try {
-      const result = await this.runQuery(systemPrompt, userPrompt, nick, target);
+      const result = await this.runQuery(systemPrompt, userPrompt, nick, target, modelOverride);
       this.irc.stopTyping(target);
       if (result && !result.includes("__SKIP__")) {
         log.logReply(target, result);
@@ -230,10 +233,10 @@ export class Agent {
     }
   }
 
-  private async runQuery(systemPrompt: string, prompt: string, nick?: string, target?: string): Promise<string | null> {
+  private async runQuery(systemPrompt: string, prompt: string, nick?: string, target?: string, modelOverride?: string): Promise<string | null> {
     let resultText: string | null = null;
     const startTime = Date.now();
-    const model = getSettings().model;
+    const model = modelOverride ?? getSettings().model;
 
     let turns = 0;
 

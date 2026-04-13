@@ -53,8 +53,16 @@ irc.onMessage((event) => {
     return;
   }
 
+  // Parse one-off model override: "model=foo rest of message"
+  let modelOverride: string | undefined;
+  const modelMatch = stripped.match(/^model=(\S+)\s+([\s\S]+)$/);
+  if (modelMatch) {
+    modelOverride = modelMatch[1];
+    stripped = modelMatch[2];
+  }
+
   context.markActive(replyTarget);
-  agent.handleMessage(nick, replyTarget, stripped);
+  agent.handleMessage(nick, replyTarget, stripped, modelOverride);
 });
 
 function handleCommand(command: string, args: string, target: string) {
