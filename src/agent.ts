@@ -144,26 +144,52 @@ export class Agent {
 
   private pending = new Map<string, Array<{ nick: string; message: string }>>();
   private processing = new Set<string>();
+  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  private static DEBOUNCE_MS = 600;
 
   async handleMessage(nick: string, target: string, message: string) {
     const key = target.toLowerCase();
 
+    if (!this.pending.has(key)) this.pending.set(key, []);
+    this.pending.get(key)!.push({ nick, message });
+
+    // If already processing a query for this target, messages just accumulate in pending
     if (this.processing.has(key)) {
-      if (!this.pending.has(key)) this.pending.set(key, []);
-      this.pending.get(key)!.push({ nick, message });
       log.logInfo(`Queued message from ${nick} in ${target} (query in progress)`);
       return;
     }
 
+    // Debounce: wait for rapid-fire messages to settle before starting the query
+    const existing = this.debounceTimers.get(key);
+    if (existing) clearTimeout(existing);
+
+    this.debounceTimers.set(key, setTimeout(() => {
+      this.debounceTimers.delete(key);
+      this.drainPending(key);
+    }, Agent.DEBOUNCE_MS));
+  }
+
+  private async drainPending(key: string) {
     this.processing.add(key);
-    await this.processMessage(nick, target, message);
 
     while (this.pending.has(key) && this.pending.get(key)!.length > 0) {
       const queued = this.pending.get(key)!.splice(0);
-      const combined = queued.map((m) => `<${m.nick}> ${m.message}`).join("\n");
-      const lastNick = queued[queued.length - 1].nick;
-      log.logInfo(`Processing ${queued.length} batched messages in ${target}`);
-      await this.processMessage(lastNick, target, combined);
+      let combinedNick: string;
+      let combinedMessage: string;
+
+      if (queued.length === 1) {
+        combinedNick = queued[0].nick;
+        combinedMessage = queued[0].message;
+      } else {
+        combinedMessage = queued.map((m) => `<${m.nick}> ${m.message}`).join("\n");
+        combinedNick = queued[queued.length - 1].nick;
+        log.logInfo(`Processing ${queued.length} batched messages in ${key}`);
+      }
+
+      // Recover original target casing from the first message
+      const target = queued[0].message ? key : key;
+      await this.processMessage(combinedNick, target, combinedMessage);
     }
 
     this.pending.delete(key);
@@ -241,6 +267,9 @@ export class Agent {
           "CronCreate",
           "CronDelete",
           "CronList",
+          "Skill(update-config)",
+          "Skill(keybindings-help)",
+          "Skill(loop)",
         ],
         mcpServers: {
           irc: this.ircToolsServer,
