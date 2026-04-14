@@ -134,6 +134,25 @@ export class Agent {
     };
   }
 
+  abort(target: string) {
+    const key = target.toLowerCase();
+    const gen = this.activeQueries.get(key);
+    if (gen) {
+      gen.return(undefined);
+      this.activeQueries.delete(key);
+    }
+    // Clear pending messages and debounce
+    this.pending.delete(key);
+    this.processing.delete(key);
+    const timer = this.debounceTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      this.debounceTimers.delete(key);
+    }
+    this.irc.stopTyping(target);
+    log.logInfo(`Aborted query for ${target}`);
+  }
+
   getStats() {
     return {
       queries: this.queryCount,
@@ -145,6 +164,7 @@ export class Agent {
   private pending = new Map<string, Array<{ nick: string; message: string; modelOverride?: string }>>();
   private processing = new Set<string>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private activeQueries = new Map<string, AsyncGenerator>();
 
   private static DEBOUNCE_MS = 600;
 
@@ -240,7 +260,7 @@ export class Agent {
 
     let turns = 0;
 
-    for await (const message of query({
+    const gen = query({
       prompt,
       options: {
         pathToClaudeCodeExecutable: "/usr/local/bin/claude",
@@ -292,7 +312,12 @@ export class Agent {
           return { behavior: "allow" as const, updatedInput: input };
         },
       },
-    })) {
+    });
+
+    if (target) this.activeQueries.set(target.toLowerCase(), gen);
+
+    try {
+    for await (const message of gen) {
       if (message.type === "assistant" && message.message?.content) {
         turns++;
         for (const block of message.message.content as any[]) {
@@ -339,6 +364,9 @@ export class Agent {
           }
         }
       }
+    }
+    } finally {
+      if (target) this.activeQueries.delete(target.toLowerCase());
     }
 
     return resultText;

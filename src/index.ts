@@ -127,8 +127,12 @@ function handleCommand(command: string, args: string, target: string) {
         irc.say(target, `pull failed: ${err.message?.split("\n")[0]}`);
       }
       break;
+    case "abort":
+      agent.abort(target);
+      irc.say(target, "aborted.");
+      break;
     case "help":
-      irc.say(target, "commands: !restart, !pull, !pr, !status (!stats), !model, !debug, !help");
+      irc.say(target, "commands: !abort, !restart, !pull, !pr, !status, !model, !debug, !help");
       break;
     default:
       irc.say(target, `unknown command: !${command}. try !help`);
