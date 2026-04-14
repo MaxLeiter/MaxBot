@@ -23,8 +23,8 @@ export class IrcClient {
       username: config.username,
       gecos: "MaxBot - self-programmable IRC bot",
       auto_reconnect: true,
-      auto_reconnect_max_wait: 30000,
-      auto_reconnect_max_retries: 10,
+      auto_reconnect_max_wait: 60000,
+      auto_reconnect_max_retries: 50,
       ping_interval: 30,
       ping_timeout: 120,
     });
