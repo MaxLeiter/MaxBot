@@ -257,6 +257,9 @@ export class Agent {
     let resultText: string | null = null;
     const startTime = Date.now();
     const model = modelOverride ?? getSettings().model;
+    const toolNames = new Map<string, string>();
+    const webSearchQueries = new Map<string, string>();
+    let lastServerToolUse = { web_search_requests: 0, web_fetch_requests: 0 };
 
     let turns = 0;
 
@@ -311,60 +314,137 @@ export class Agent {
           // Auto-approve everything else (permissionMode handles this, but just in case)
           return { behavior: "allow" as const, updatedInput: input };
         },
+        stderr: (data: string) => {
+          const trimmed = data.trim();
+          if (trimmed) log.logInfo(`claude-stderr: ${trimmed}`);
+        },
       },
     });
 
     if (target) this.activeQueries.set(target.toLowerCase(), gen);
 
     try {
-    for await (const message of gen) {
-      if (message.type === "assistant" && message.message?.content) {
-        turns++;
-        for (const block of message.message.content as any[]) {
-          if (block.type === "text" && block.text) {
-            log.logThinking(block.text);
-            if (getSettings().debug && target) {
-              const raw = block.text.length > 120 ? block.text.slice(0, 120) + "..." : block.text;
-              const preview = this.scrub(raw).replace(/[\r\n]+/g, " ").trim();
-              if (preview) this.irc.action(target, `thinks: ${preview}`);
+      for await (const message of gen) {
+        if (message.type === "assistant" && message.message?.content) {
+          turns++;
+          const serverToolUse = (message.message as any)?.usage?.server_tool_use;
+          if (serverToolUse) {
+            lastServerToolUse = {
+              web_search_requests: serverToolUse.web_search_requests ?? 0,
+              web_fetch_requests: serverToolUse.web_fetch_requests ?? 0,
+            };
+          }
+          for (const block of message.message.content as any[]) {
+            if (block.type === "text" && block.text) {
+              log.logThinking(block.text);
+              if (getSettings().debug && target) {
+                const raw = block.text.length > 120 ? block.text.slice(0, 120) + "..." : block.text;
+                const preview = this.scrub(raw).replace(/[\r\n]+/g, " ").trim();
+                if (preview) this.irc.action(target, `thinks: ${preview}`);
+              }
+            } else if (block.type === "tool_use") {
+              if (block.id && block.name) toolNames.set(block.id, block.name);
+              if (block.id && block.name === "WebSearch" && typeof block.input?.query === "string") {
+                webSearchQueries.set(block.id, this.scrub(block.input.query));
+              }
+              log.logToolCall(block.name, block.input);
+              if (getSettings().debug && target) {
+                const name = block.name.replace("mcp__irc__", "").replace("mcp__", "");
+                const args = block.input ? " " + Object.entries(block.input)
+                  .map(([k, v]) => {
+                    const s = this.scrub(String(v));
+                    return `${k}=${s.length > 40 ? s.slice(0, 40) + "..." : s}`;
+                  }).join(" ") : "";
+                this.irc.action(target, `used ${name}${args}`);
+              }
             }
-          } else if (block.type === "tool_use") {
-            log.logToolCall(block.name, block.input);
-            if (getSettings().debug && target) {
-              const name = block.name.replace("mcp__irc__", "").replace("mcp__", "");
-              const args = block.input ? " " + Object.entries(block.input)
-                .map(([k, v]) => {
-                  const s = this.scrub(String(v));
-                  return `${k}=${s.length > 40 ? s.slice(0, 40) + "..." : s}`;
-                }).join(" ") : "";
-              this.irc.action(target, `used ${name}${args}`);
+          }
+        } else if (message.type === "user" && message.message?.content) {
+          for (const block of message.message.content as any[]) {
+            if (block.type === "tool_result") {
+              const content = typeof block.content === "string"
+                ? block.content
+                : Array.isArray(block.content)
+                  ? block.content
+                      .map((item: any) => item?.text ?? (typeof item === "string" ? item : ""))
+                      .filter(Boolean)
+                      .join(" ")
+                  : "";
+              const scrubbedContent = this.scrub(content || "(empty result)");
+              const toolUseId = block.tool_use_id ?? "unknown";
+              const toolName = toolNames.get(block.tool_use_id) ?? "unknown";
+              if (toolName === "WebSearch") {
+                log.logWebSearchResult(
+                  toolUseId,
+                  webSearchQueries.get(toolUseId) ?? "unknown",
+                  lastServerToolUse.web_search_requests,
+                  Boolean(block.is_error),
+                  scrubbedContent.slice(0, 2000),
+                );
+              } else {
+                log.logToolResult(
+                  toolUseId,
+                  toolName,
+                  Boolean(block.is_error),
+                  scrubbedContent.slice(0, 120),
+                );
+              }
+            } else if (block.type === "web_search_tool_result") {
+              const content = block.content;
+              const isError = content?.type === "web_search_tool_result_error";
+              const rawContent = this.scrub(JSON.stringify(content ?? "(empty result)"));
+              log.logWebSearchResult(
+                block.tool_use_id ?? "unknown",
+                webSearchQueries.get(block.tool_use_id ?? "unknown") ?? "unknown",
+                lastServerToolUse.web_search_requests,
+                isError,
+                rawContent.slice(0, 2000),
+              );
+            } else if (block.type === "web_fetch_tool_result") {
+              const content = block.content;
+              const isError = content?.type === "web_fetch_tool_result_error";
+              const summary = isError
+                ? `error: ${content.error_code ?? "unknown"}`
+                : `${Array.isArray(content) ? content.length : 0} blocks`;
+              log.logToolResult(block.tool_use_id ?? "unknown", "WebFetch", isError, summary);
+            }
+          }
+        } else if (message.type === "system" && (message as any).subtype === "api_retry") {
+          log.logApiRetry(
+            (message as any).attempt ?? 0,
+            (message as any).max_retries ?? 0,
+            (message as any).error_status ?? null,
+            String((message as any).error ?? "unknown"),
+            (message as any).retry_delay_ms ?? 0,
+          );
+        } else if (message.type === "result") {
+          const elapsed = Date.now() - startTime;
+          this.queryCount++;
+
+          if (message.subtype === "success") {
+            resultText = message.result;
+            const usage = (message as any).usage ?? {};
+            const tokens = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+            const cost = (message as any).total_cost_usd ?? 0;
+            this.totalTokens += tokens;
+            this.totalCostUsd += cost;
+
+            log.logQueryResult(this.queryCount, model, turns, tokens, cost, elapsed);
+            log.logSessionTotal(this.totalTokens, this.totalCostUsd);
+          } else {
+            const errors = Array.isArray((message as any).errors) ? (message as any).errors : [];
+            const errorStr = errors.length > 0 ? errors.join("; ") : message.subtype;
+            log.logQueryError(this.queryCount, elapsed, errorStr);
+            const denials = Array.isArray((message as any).permission_denials) ? (message as any).permission_denials : [];
+            for (const denial of denials) {
+              log.logInfo(`permission denied: ${denial.tool_name ?? "unknown"}`);
+            }
+            if (isModelError(errorStr)) {
+              resultText = MODEL_ERROR_MSG(model);
             }
           }
         }
       }
-
-      if (message.type === "result") {
-        const elapsed = Date.now() - startTime;
-        this.queryCount++;
-
-        if (message.subtype === "success") {
-          resultText = message.result;
-          const tokens = (message as any).tokens_used_in_run ?? 0;
-          const cost = (message as any).total_cost_usd ?? 0;
-          this.totalTokens += tokens;
-          this.totalCostUsd += cost;
-
-          log.logQueryResult(this.queryCount, model, turns, tokens, cost, elapsed);
-          log.logSessionTotal(this.totalTokens, this.totalCostUsd);
-        } else {
-          const errorStr = String((message as any).error ?? message.subtype);
-          log.logQueryError(this.queryCount, elapsed, errorStr);
-          if (isModelError(errorStr)) {
-            resultText = MODEL_ERROR_MSG(model);
-          }
-        }
-      }
-    }
     } finally {
       if (target) this.activeQueries.delete(target.toLowerCase());
     }

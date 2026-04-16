@@ -60,6 +60,7 @@ For lists, just use plain text with commas or newlines.
 - If a request will take multiple steps and is likely to take noticeably longer than a quick tool call, use send_irc_message to the same channel/user first with a brief acknowledgment like "looking into it" or "checking that". Skip the pre-tool message for fast reads, simple lookups, or single quick commands. Then do your work and return the final answer.
 - Only use change_model when the user explicitly asks to switch models.
 - If you need to ask the user a clarifying question, just say it in your reply. Do NOT use AskUserQuestion (it's disabled, you're headless). Just ask in plain text and wait for their next message.
+- Infer obvious intent from the surrounding conversation and recent channel context instead of acting overly literal. Ask only when the ambiguity would materially change the action you take.
 
 ## Scrollback
 - You receive recent channel messages as context before the current message.
@@ -128,13 +129,18 @@ async function loadChannelMemory(target: string): Promise<string | null> {
 }
 
 /** Parse YAML frontmatter from a SKILL.md file */
-function parseFrontmatter(content: string): { name?: string; description?: string } {
+function parseFrontmatter(content: string): { name?: string; description?: string; inline?: boolean } {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
   const yaml = match[1];
   const name = yaml.match(/^name:\s*(.+)$/m)?.[1]?.trim();
   const description = yaml.match(/^description:\s*(.+)$/m)?.[1]?.trim();
-  return { name, description };
+  const inline = yaml.match(/^inline:\s*(.+)$/m)?.[1]?.trim().toLowerCase() === "true";
+  return { name, description, inline };
+}
+
+function stripFrontmatter(content: string): string {
+  return content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
 }
 
 async function loadSkills(): Promise<string> {
@@ -152,7 +158,11 @@ async function loadSkills(): Promise<string> {
           const content = await readFile(skillFile, "utf-8");
           const fm = parseFrontmatter(content);
           const name = fm.name ?? dir.name;
-          const description = fm.description ?? content.split("\n").find((l: string) => l.trim().length > 0)?.replace(/^#+ /, "") ?? "";
+          const body = stripFrontmatter(content);
+          const description = fm.description ?? body.split("\n").find((l: string) => l.trim().length > 0)?.replace(/^#+ /, "") ?? "";
+          if (fm.inline) {
+            return `## Skill: ${name}\n${body}`;
+          }
           return `- ${name}: ${description}`;
         } catch {
           return null;
@@ -160,12 +170,21 @@ async function loadSkills(): Promise<string> {
       })
     );
 
-    const valid = skills.filter(Boolean);
+    const valid = skills.filter((skill): skill is string => Boolean(skill));
     if (valid.length === 0) return "";
 
-    return `## Available Skills
-The following skills are in ${skillsDir}. Read the full SKILL.md file with the Read tool when you need one.
-${valid.join("\n")}`;
+    const inlineSkills = valid.filter((skill) => skill.startsWith("## Skill:"));
+    const summarizedSkills = valid.filter((skill) => !skill.startsWith("## Skill:"));
+
+    const sections: string[] = [];
+    if (summarizedSkills.length > 0) {
+      sections.push(`## Available Skills\nThe following skills are in ${skillsDir}. Read the full SKILL.md file with the Read tool when you need one.\n${summarizedSkills.join("\n")}`);
+    }
+    if (inlineSkills.length > 0) {
+      sections.push(`## Inlined Skills\n${inlineSkills.join("\n\n")}`);
+    }
+
+    return sections.join("\n\n");
   } catch {
     return "";
   }

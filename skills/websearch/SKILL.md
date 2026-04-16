@@ -1,6 +1,7 @@
 ---
 name: websearch
 description: Search the web for current information. Use when the user asks about recent events, live status, pricing, docs, or anything likely newer than training data.
+inline: true
 ---
 
 # websearch
