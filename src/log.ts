@@ -47,6 +47,47 @@ export function logToolCall(name: string, args?: Record<string, any>) {
   console.log(`${timestamp()} ${c.yellow}  ⚡ ${shortName}${c.reset}${argStr}`);
 }
 
+export function logToolResult(toolUseId: string, toolName: string, isError: boolean, summary: string) {
+  const shortName = toolName.replace("mcp__irc__", "").replace("mcp__", "");
+  const shortId = toolUseId.slice(0, 8);
+  const color = isError ? c.red : c.dim;
+  console.log(`${timestamp()} ${color}  ↳ ${shortName}${c.reset} ${c.gray}[${shortId}]${c.reset} ${summary}`);
+}
+
+export function logWebSearchResult(
+  toolUseId: string,
+  query: string,
+  serverSearchCount: number,
+  isError: boolean,
+  rawContent: string,
+) {
+  const shortId = toolUseId.slice(0, 8);
+  const verdict = isError
+    ? `${c.red}error${c.reset}`
+    : serverSearchCount > 0
+      ? `${c.green}real${c.reset}`
+      : `${c.red}fake${c.reset}`;
+
+  console.log(
+    `${timestamp()} ${c.yellow}  ↳ WebSearch${c.reset} ${c.gray}[${shortId}]${c.reset} ` +
+    `query="${query}" ${verdict} ${c.gray}server_searches=${serverSearchCount}${c.reset}`
+  );
+  console.log(`${timestamp()} ${c.dim}  search result: ${rawContent}${c.reset}`);
+}
+
+export function logApiRetry(
+  attempt: number,
+  maxRetries: number,
+  errorStatus: number | null,
+  errorType: string,
+  delayMs: number,
+) {
+  const status = errorStatus === null ? "connection error" : `http ${errorStatus}`;
+  console.log(
+    `${timestamp()} ${c.yellow}  ↻ api retry${c.reset} ${attempt}/${maxRetries} ${status}, ${errorType}, ${delayMs}ms`
+  );
+}
+
 export function logThinking(text: string) {
   const preview = text.length > 100 ? text.slice(0, 100) + "..." : text;
   console.log(`${timestamp()} ${c.magenta}  💭 ${preview}${c.reset}`);
