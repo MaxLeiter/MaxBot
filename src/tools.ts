@@ -28,7 +28,8 @@ export function createIrcTools(
   crons: CronManager,
   getStats: () => BotStats,
   setModel: (model: string) => Promise<void>,
-  getModel: () => string
+  getModel: () => string,
+  onSend?: (target: string, message: string) => void
 ) {
   const allowedTargets = new Set<string>();
 
@@ -61,6 +62,7 @@ export function createIrcTools(
       if (err) return fail(err);
       irc.say(args.target, args.message);
       context.recordMessage(irc.nick, args.target, args.message);
+      onSend?.(args.target, args.message);
       return ok(`Sent to ${args.target}`);
     }
   );

@@ -38,7 +38,16 @@ export class Agent {
       crons,
       () => this.getStats(),
       (model: string) => this.setModel(model),
-      () => getSettings().model
+      () => getSettings().model,
+      (target: string, message: string) => {
+        const k = target.toLowerCase();
+        let set = this.querySends.get(k);
+        if (!set) {
+          set = new Set();
+          this.querySends.set(k, set);
+        }
+        set.add(message.trim());
+      }
     );
     this.ircToolsServer = tools.server;
     this.allowTarget = tools.allowTarget;
@@ -165,6 +174,9 @@ export class Agent {
   private processing = new Set<string>();
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private activeQueries = new Map<string, AsyncGenerator>();
+  // Messages sent via send_irc_message during the current query, per target.
+  // Used to suppress the duplicate auto-sent final reply.
+  private querySends = new Map<string, Set<string>>();
 
   private static DEBOUNCE_MS = 600;
 
@@ -221,6 +233,9 @@ export class Agent {
 
   private async processMessage(nick: string, target: string, message: string, modelOverride?: string) {
     const settings = getSettings();
+    // Reset per-query tracking of tool-sent messages for this target so we can
+    // avoid re-sending the same text as the auto final reply.
+    this.querySends.set(target.toLowerCase(), new Set());
     const systemPrompt = await buildSystemPrompt(
       this.config.irc.nick,
       settings.authorizedUsers
@@ -240,9 +255,14 @@ export class Agent {
       const result = await this.runQuery(systemPrompt, userPrompt, nick, target, modelOverride);
       this.irc.stopTyping(target);
       if (result && !result.includes("__SKIP__")) {
-        log.logReply(target, result);
-        this.irc.say(target, result, replyMsgId);
-        this.context.recordMessage(this.config.irc.nick, target, result);
+        const alreadySent = this.querySends.get(target.toLowerCase())?.has(result.trim());
+        if (alreadySent) {
+          log.logInfo("Skipped duplicate final reply (already sent via send_irc_message)");
+        } else {
+          log.logReply(target, result);
+          this.irc.say(target, result, replyMsgId);
+          this.context.recordMessage(this.config.irc.nick, target, result);
+        }
       }
     } catch (err: any) {
       this.irc.stopTyping(target);
