@@ -14,6 +14,8 @@ const irc = new IrcClient(config.irc);
 const agent = new Agent(config, irc, context, crons);
 
 const botNickLower = config.irc.nick.toLowerCase();
+// Only the owner may DM the bot; in channels, any authorized user may talk.
+const OWNER_NICK = "maxleiter";
 const nickMentionRegex = new RegExp(`\\b${config.irc.nick}\\b`, "i");
 const nickStripRegex = new RegExp(`\\b${config.irc.nick}[,:;]?\\s*`, "gi");
 
@@ -33,7 +35,12 @@ irc.onMessage((event) => {
   const replyTarget = isDM ? nick : target;
   if (tags) irc.trackMsgId(replyTarget, tags);
 
-  if (!getSettings().authorizedUsers.some((u: string) => u.toLowerCase() === nick.toLowerCase())) return;
+  // DMs are restricted to the owner; in channels, any authorized user may talk.
+  const nickLower = nick.toLowerCase();
+  const authorized = isDM
+    ? nickLower === OWNER_NICK
+    : getSettings().authorizedUsers.some((u: string) => u.toLowerCase() === nickLower);
+  if (!authorized) return;
 
   // Extract message after nick mention
   let stripped: string;
