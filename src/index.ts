@@ -16,6 +16,10 @@ const agent = new Agent(config, irc, context, crons);
 const botNickLower = config.irc.nick.toLowerCase();
 // Only the owner may DM the bot; in channels, any authorized user may talk.
 const OWNER_NICK = "maxleiter";
+// Strip URLs before mention detection so the nick doesn't trigger inside links
+// like https://github.com/MaxLeiter/MaxBot. \b treats / as a boundary, so without
+// stripping, the nick matches inside URLs.
+const urlRegex = /https?:\/\/\S+/g;
 const nickMentionRegex = new RegExp(`\\b${config.irc.nick}\\b`, "i");
 const nickStripRegex = new RegExp(`\\b${config.irc.nick}[,:;]?\\s*`, "gi");
 
@@ -47,7 +51,8 @@ irc.onMessage((event) => {
   if (isDM) {
     stripped = message;
   } else {
-    if (!nickMentionRegex.test(message)) return;
+    const messageWithoutUrls = message.replace(urlRegex, "");
+    if (!nickMentionRegex.test(messageWithoutUrls)) return;
     stripped = message.replace(nickStripRegex, "").trim();
     if (!stripped) return;
   }
